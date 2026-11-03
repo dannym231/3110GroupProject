@@ -2,3 +2,4 @@
 
 ## Members
   - Daniel McCance drm329
+  - Luca Occhipinti lo225
