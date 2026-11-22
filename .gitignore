@@ -1,0 +1,13 @@
+# Dune build artifacts and local opam switch
+_build/
+_build*
+_opam/
+
+# Generated package files and editor/OS artifacts
+*.install
+compile_commands.json
+.merlin
+*~
+*.swp
+*.swo
+.DS_Store
