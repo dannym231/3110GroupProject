@@ -19,7 +19,10 @@
  (name monopoly)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml yojson)
+ (depends
+  ocaml
+  ansi-terminal
+  yojson)
  (tags
   ("add topics" "to describe" your project)))
 
