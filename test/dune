@@ -1,6 +1,27 @@
-(tests
- (names test_monopoly board_test)
+(test
+ (name test_monopoly)
+ (modules test_monopoly)
+ (libraries ounit2 monopoly)
+ (deps ../data/board.json)
+ (action
+  (chdir %{project_root}
+   (run %{test}))))
+
+(test
+ (name test_view)
+ (modules test_view)
+ (libraries ounit2 monopoly))
+
+(test
+ (name test_game)
+ (modules test_game)
+ (libraries ounit2 monopoly))
+
+(test
+ (name board_test)
+ (modules board_test)
  (libraries ounit2 monopoly)
  (deps (glob_files_rec ../data/*)))
 
-(cram (deps ../bin/main.exe (glob_files_rec ../data/*)))
+(cram
+ (deps %{bin:monopoly}))
