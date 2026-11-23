@@ -115,6 +115,16 @@ let tests =
            let g2 = ok (Game.roll (1, 2) g1) in
            assert_equal [ "a"; "b"; "a" ]
              (List.map (fun g -> (Game.current g).id) [ g0; g1; g2 ]) );
+         ( "same seed gives the same rolls" >:: fun _ ->
+           let r1 = Dice.roller ~seed:42 () and r2 = Dice.roller ~seed:42 () in
+           let five r = List.init 5 (fun _ -> r ()) in
+           assert_equal (five r1) (five r2) );
+         ( "dice are always 1 to 6" >:: fun _ ->
+           let r = Dice.roller ~seed:7 () in
+           for _ = 1 to 1000 do
+             let a, b = r () in
+             assert_bool "in range" (a >= 1 && a <= 6 && b >= 1 && b <= 6)
+           done );
        ]
 
 let _ = run_test_tt_main tests
