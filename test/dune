@@ -25,3 +25,9 @@
 
 (cram
  (deps %{bin:monopoly}))
+
+(test
+ (name test_lan)
+ (modules test_lan)
+ (libraries ounit2 monopoly unix threads)
+ (deps ../data/board.json))

@@ -100,28 +100,20 @@ let snapshot g =
         (Game.last_dice g);
   }
 
+let try_apply ~roll cmd g =
+  match cmd with
+  | View_state.Roll ->
+      let dice = if Game.phase g = Awaiting_roll then roll () else (1, 1) in
+      Game.roll dice g
+  | Buy -> Game.buy g
+  | Pass -> Game.pass g
+  | Pay -> Game.pay g
+  | _ -> Error "That action is not part of this game yet."
+
 let apply ~roll cmd g =
-  let result =
-    match cmd with
-    | View_state.Roll ->
-        let dice = if Game.phase g = Awaiting_roll then roll () else (1, 1) in
-        Game.roll dice g
-    | Buy -> Game.buy g
-    | Pass -> Game.pass g
-    | Pay -> Game.pay g
-    | Quit | Next | Prev -> Ok g
-    | Ack_card
-    | Pay_jail
-    | Use_jail_card
-    | Roll_doubles
-    | Build
-    | Mortgage
-    | Unmortgage
-    | Accept_trade
-    | Decline_trade
-    | Host
-    | Join -> Error "That action is not part of this game yet."
-  in
-  match result with
-  | Ok g -> g
-  | Error msg -> Game.note msg g
+  match cmd with
+  | View_state.Quit | Next | Prev -> g
+  | _ -> (
+      match try_apply ~roll cmd g with
+      | Ok g -> g
+      | Error msg -> Game.note msg g)
