@@ -78,30 +78,27 @@ let read_byte =
     else if Unix.read Unix.stdin buffer 0 1 = 0 then raise End_of_file
     else Some (Bytes.get buffer 0)
 
-let read_event ~size =
-  let poll () =
-    try
-      let current = terminal_size () in
-      if current <> size then Some (Resize current)
-      else
-        match read_byte 0.1 with
-        | Some '\004' -> Some End_of_input
-        | None -> None
-        | Some c ->
-            View_input.decode ~read_more:(fun () -> read_byte 0.04) c
-            |> Option.map (fun key ->
-                (* The terminal can shrink while select is waiting for a key. *)
-                let current = terminal_size () in
-                if current <> size && not (View_input.is_quit key) then
-                  Resize current
-                else Key key)
-    with
-    | End_of_file | Unix.Unix_error (Unix.EIO, _, _) -> Some End_of_input
-    | Unix.Unix_error (Unix.EINTR, _, _) -> None
-  in
-  let rec wait () =
-    match poll () with
-    | Some event -> event
-    | None -> wait ()
-  in
-  wait ()
+let poll_event ~size =
+  try
+    let current = terminal_size () in
+    if current <> size then Some (Resize current)
+    else
+      match read_byte 0.1 with
+      | Some '\004' -> Some End_of_input
+      | None -> None
+      | Some c ->
+          View_input.decode ~read_more:(fun () -> read_byte 0.04) c
+          |> Option.map (fun key ->
+              (* The terminal can shrink while select is waiting for a key. *)
+              let current = terminal_size () in
+              if current <> size && not (View_input.is_quit key) then
+                Resize current
+              else Key key)
+  with
+  | End_of_file | Unix.Unix_error (Unix.EIO, _, _) -> Some End_of_input
+  | Unix.Unix_error (Unix.EINTR, _, _) -> None
+
+let rec read_event ~size =
+  match poll_event ~size with
+  | Some event -> event
+  | None -> read_event ~size

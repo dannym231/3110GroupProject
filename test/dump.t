@@ -18,8 +18,26 @@ A missing or non-numeric seed is rejected before the game starts.
 
   $ monopoly --seed
   usage: monopoly [--dump | --tour | --seed N] [name ...]
+         monopoly --host NAME [--port PORT] [--seed N]
+         monopoly --join HOST NAME [--port PORT]
   [2]
 
   $ monopoly --seed nope
   usage: monopoly [--dump | --tour | --seed N] [name ...]
+         monopoly --host NAME [--port PORT] [--seed N]
+         monopoly --join HOST NAME [--port PORT]
+  [2]
+
+LAN options are checked before either terminal opens.
+
+  $ monopoly --host Alex --port 65536
+  usage: monopoly [--dump | --tour | --seed N] [name ...]
+         monopoly --host NAME [--port PORT] [--seed N]
+         monopoly --join HOST NAME [--port PORT]
+  [2]
+
+  $ monopoly --join localhost Blake --seed 42
+  usage: monopoly [--dump | --tour | --seed N] [name ...]
+         monopoly --host NAME [--port PORT] [--seed N]
+         monopoly --join HOST NAME [--port PORT]
   [2]
