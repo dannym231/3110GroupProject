@@ -13,3 +13,13 @@ The plain dump covers the tour without reading the keyboard.
   $ grep -c "$(printf '\033')" tour.txt
   0
   [1]
+
+A missing or non-numeric seed is rejected before the game starts.
+
+  $ monopoly --seed
+  usage: monopoly [--dump | --tour | --seed N] [name ...]
+  [2]
+
+  $ monopoly --seed nope
+  usage: monopoly [--dump | --tour | --seed N] [name ...]
+  [2]
