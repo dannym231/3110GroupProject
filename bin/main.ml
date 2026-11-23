@@ -56,9 +56,8 @@ let tour () =
         (View.initial (View_dummy.snapshot opening))
         (View.terminal_size ()) ~redraw:true)
 
-let roll () = (Random.int 6 + 1, Random.int 6 + 1)
-
-let play game =
+let play ?seed game =
+  let roll = Dice.roller ?seed () in
   let rec loop game ui size ~redraw =
     let state = Play.snapshot game in
     if redraw then View.show (View.render ~size ~ui state);
@@ -76,7 +75,6 @@ let play game =
             loop game (View.initial (Play.snapshot game)) size ~redraw:true
         | None -> loop game next_ui size ~redraw:(next_ui <> ui))
   in
-  Random.self_init ();
   require_tty ();
   with_play (fun () ->
       let state = Play.snapshot game in
@@ -90,7 +88,7 @@ let players_of = function
   | [] -> [ ("alex", "Alex"); ("blake", "Blake") ]
   | names -> List.map (fun name -> (name, name)) names
 
-let start names =
+let start ?seed names =
   match Board.load "data/board.json" with
   | Error msg -> die ("monopoly: " ^ msg)
   | Ok board when Board.size board <> 40 ->
@@ -101,7 +99,21 @@ let start names =
         with Invalid_argument msg -> Error msg
       with
       | Error msg -> die ("monopoly: " ^ msg)
-      | Ok game -> play game)
+      | Ok game -> play ?seed game)
+
+let usage () =
+  prerr_endline "usage: monopoly [--dump | --tour | --seed N] [name ...]";
+  exit 2
+
+let rec split_seed seed names = function
+  | [] -> Some (seed, List.rev names)
+  | "--seed" :: n :: rest -> (
+      match (seed, int_of_string_opt n) with
+      | None, Some n -> split_seed (Some n) names rest
+      | _ -> None)
+  | "--seed" :: [] -> None
+  | arg :: _ when String.starts_with ~prefix:"--" arg -> None
+  | name :: rest -> split_seed seed (name :: names) rest
 
 let () =
   let args =
@@ -112,10 +124,10 @@ let () =
   match args with
   | [ "--dump" ] -> dump ()
   | [ "--tour" ] -> tour ()
-  | _ when List.exists (String.starts_with ~prefix:"--") args ->
-      prerr_endline "usage: monopoly [--dump | --tour] [name ...]";
-      exit 2
-  | [ _ ] ->
-      prerr_endline "monopoly: need at least two players";
-      exit 2
-  | names -> start names
+  | _ -> (
+      match split_seed None [] args with
+      | None -> usage ()
+      | Some (_, [ _ ]) ->
+          prerr_endline "monopoly: need at least two players";
+          exit 2
+      | Some (seed, names) -> start ?seed names)

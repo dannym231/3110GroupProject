@@ -180,6 +180,18 @@ let tests =
            assert_equal 1500 (cash state "alex");
            assert_bool "roll error" (log_has state "You can't roll right now.")
          );
+         ( "seeded roll reaches the view" >:: fun _ ->
+           let d1, d2 = Dice.roller ~seed:42 () () in
+           let roll = Dice.roller ~seed:42 () in
+           let state =
+             Play.snapshot (Play.apply ~roll View_state.Roll (game ()))
+           in
+           assert_equal
+             (Some { View_state.die1 = d1; die2 = d2 })
+             state.last_dice;
+           assert_has "last roll"
+             (View.plain (View.render state))
+             (Printf.sprintf "Last roll %d + %d = %d" d1 d2 (d1 + d2)) );
        ]
 
 let _ = run_test_tt_main tests
