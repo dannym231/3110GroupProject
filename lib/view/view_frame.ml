@@ -124,7 +124,7 @@ let page rows heading body footer =
   let gap = List.init (rows - 2 - List.length visible) (fun _ -> []) in
   (heading :: visible) @ gap @ [ footer ]
 
-let render ~size:((columns, rows) as size) ~preview (ui : View_input.t)
+let render ~size:((columns, rows) as size) ~preview ~demo (ui : View_input.t)
     (state : View_state.t) =
   let doc =
     if not (fits size) then
@@ -150,12 +150,13 @@ let render ~size:((columns, rows) as size) ~preview (ui : View_input.t)
           page rows heading (List.drop offset body)
             (line (scroll ^ "[Esc] Back   [Q] Quit"))
       | None ->
-          let browse = "[ / ] Browse demo   [Q] Quit" in
+          let browse = if demo then "[ / ] Browse demo   " else "" in
+          let quit = "[Q] Quit" in
           if View_screens.on_board state.screen then
             page rows (header state) (ring state ui ~preview)
               (line
                  ("[Arrows] Move   [Tab] Board / players / items   [Enter] \
-                   Inspect   " ^ browse))
+                   Inspect   " ^ browse ^ quit))
           else
             let body =
               [ [] ]
@@ -165,6 +166,6 @@ let render ~size:((columns, rows) as size) ~preview (ui : View_input.t)
               @ recent state
               |> wrap (columns - 1)
             in
-            page rows (title "MONOPOLY") body (line browse)
+            page rows (title "MONOPOLY") body (line (browse ^ quit))
   in
   doc |> List.take (max 0 rows) |> List.map (View_style.crop (columns - 1))

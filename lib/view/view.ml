@@ -24,13 +24,13 @@ let plain = View_style.text
 let show = View_style.show
 let command_of_key = View_input.command_of_key
 
-let render ?(size = minimum_size) ?ui ?(preview = false) state =
+let render ?(size = minimum_size) ?ui ?(preview = false) ?(demo = false) state =
   let ui =
     match ui with
     | Some ui -> ui
     | None -> initial state
   in
-  View_frame.render ~size ~preview ui state
+  View_frame.render ~size ~preview ~demo ui state
 
 let update ~size state ui key =
   if View_frame.fits size || View_input.is_quit key then

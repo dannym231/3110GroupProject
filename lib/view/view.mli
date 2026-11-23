@@ -28,7 +28,13 @@ val update :
   size:int * int -> View_state.t -> ui -> key -> ui * View_state.command option
 
 val render :
-  ?size:int * int -> ?ui:ui -> ?preview:bool -> View_state.t -> View_style.doc
+  ?size:int * int ->
+  ?ui:ui ->
+  ?preview:bool ->
+  ?demo:bool ->
+  View_state.t ->
+  View_style.doc
+(** [demo] adds the scripted-tour hint to the status line. *)
 
 val plain : View_style.doc -> string
 val show : View_style.doc -> unit
