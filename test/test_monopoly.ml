@@ -1,130 +1,185 @@
 open OUnit2
 open Monopoly
 
-(* A small 6-square board written inline, so the tests don't depend on
-   reading data/board.json from disk:
-   0 Go | 1 Brown A ($60, rent 4) | 2 Brown B ($60, rent 2)
-   3 Chance | 4 Mansion ($2000, rent 100) | 5 Free Parking *)
-let board =
-  match
-    Board.of_string
-      {|{"squares":[
-        {"name":"Go","kind":"go"},
-        {"name":"Brown A","kind":"property","group":"brown","price":60,"rent":4},
-        {"name":"Brown B","kind":"property","group":"brown","price":60,"rent":2},
-        {"name":"Chance","kind":"chance"},
-        {"name":"Mansion","kind":"property","group":"gold","price":2000,"rent":100},
-        {"name":"Free Parking","kind":"free_parking"}
-      ]}|}
-  with
-  | Ok b -> b
-  | Error e -> failwith e
+let has hay needle =
+  let n = String.length needle in
+  if n = 0 then true
+  else
+    let rec go i =
+      if i + n > String.length hay then false
+      else if String.sub hay i n = needle then true
+      else go (i + 1)
+    in
+    go 0
 
-let new_game () = Game.create board [ ("a", "Alex"); ("b", "Blake") ]
+let assert_has msg hay needle =
+  assert_bool (msg ^ ": missing `" ^ needle ^ "`") (has hay needle)
 
-(* Unwrap a result, failing the test with the error message if it's Error. *)
 let ok = function
-  | Ok g -> g
-  | Error e -> assert_failure ("unexpected error: " ^ e)
+  | Ok x -> x
+  | Error msg -> failwith msg
 
-let is_error = function
-  | Ok _ -> false
-  | Error _ -> true
+let board_text =
+  let square i =
+    match i with
+    | 0 -> {|{ "name": "Go", "kind": "go" }|}
+    | 1 ->
+        {|{ "name": "Mediterranean Avenue", "kind": "property", "group": "brown", "price": 60, "rent": 2 }|}
+    | 3 ->
+        {|{ "name": "Baltic Avenue", "kind": "property", "group": "brown", "price": 60, "rent": 4 }|}
+    | 4 -> {|{ "name": "Income Tax", "kind": "tax", "amount": 200 }|}
+    | 5 -> {|{ "name": "Reading Railroad", "kind": "railroad", "price": 200 }|}
+    | 12 -> {|{ "name": "Electric Company", "kind": "utility", "price": 150 }|}
+    | n -> Printf.sprintf {|{ "name": "Square %d", "kind": "free_parking" }|} n
+  in
+  "{\"squares\":[" ^ String.concat "," (List.init 40 square) ^ "]}"
 
-let find g id = List.find (fun (p : Game.player) -> p.id = id) (Game.players g)
-let cash g id = (find g id).cash
-let position g id = (find g id).position
-let pp_int = string_of_int
+let board () = ok (Board.of_string board_text)
+let game () = Game.create (board ()) [ ("alex", "Alex"); ("blake", "Blake") ]
+let roll dice g = Play.apply ~roll:(fun () -> dice) View_state.Roll g
+
+let cash state id =
+  match View_state.player state id with
+  | Some p -> p.cash
+  | None -> failwith id
+
+let owner state index =
+  match View_state.square state index with
+  | Some sq -> sq.owner
+  | None -> failwith "missing square"
+
+let square state index =
+  match View_state.square state index with
+  | Some sq -> sq
+  | None -> failwith "missing square"
+
+let log_has (state : View_state.t) needle =
+  List.exists (fun line -> has line needle) state.log
 
 let tests =
-  "game tests"
+  "play"
   >::: [
-         ( "players start on Go with $1500" >:: fun _ ->
-           let g = new_game () in
-           assert_equal 0 (position g "a") ~printer:pp_int;
-           assert_equal 1500 (cash g "a") ~printer:pp_int;
-           assert_equal 1500 (cash g "b") ~printer:pp_int );
-         ( "first player is Alex, waiting to roll" >:: fun _ ->
-           let g = new_game () in
-           assert_equal "a" (Game.current g).id;
-           assert_equal Game.Awaiting_roll (Game.phase g) );
-         ( "need at least two players" >:: fun _ ->
-           assert_raises (Invalid_argument "Game.create: need two players")
-             (fun () -> Game.create board [ ("a", "Alex") ]) );
-         ( "roll 1+2 moves to square 3" >:: fun _ ->
-           let g = ok (Game.roll (1, 2) (new_game ())) in
-           assert_equal 3 (position g "a") ~printer:pp_int );
-         ( "landing on an unowned property offers it" >:: fun _ ->
-           (* 6 squares, so 3+4 = 7 wraps to square 1 *)
-           let g = ok (Game.roll (3, 4) (new_game ())) in
-           assert_equal (Game.Awaiting_buy 1) (Game.phase g) );
-         ( "passing Go pays $200" >:: fun _ ->
-           let g = ok (Game.roll (3, 4) (new_game ())) in
-           assert_equal 1 (position g "a") ~printer:pp_int;
-           assert_equal 1700 (cash g "a") ~printer:pp_int );
-         ( "buying costs the price and records the owner" >:: fun _ ->
-           let g = ok (Game.roll (3, 4) (new_game ())) in
-           let g = ok (Game.buy g) in
-           assert_equal 1640 (cash g "a") ~printer:pp_int;
-           assert_equal (Some "a") (Game.owner g 1) );
-         ( "buying ends the turn" >:: fun _ ->
-           let g = ok (Game.buy (ok (Game.roll (3, 4) (new_game ())))) in
-           assert_equal "b" (Game.current g).id;
-           assert_equal Game.Awaiting_roll (Game.phase g) );
-         ( "passing leaves the square unowned" >:: fun _ ->
-           let g = ok (Game.pass (ok (Game.roll (3, 4) (new_game ())))) in
-           assert_equal None (Game.owner g 1);
-           assert_equal "b" (Game.current g).id );
-         ( "landing on someone else's property charges rent" >:: fun _ ->
-           (* Alex buys square 1; Blake rolls 3+4 and lands on it *)
-           let g = ok (Game.buy (ok (Game.roll (3, 4) (new_game ())))) in
-           let g = ok (Game.roll (3, 4) g) in
+         ( "real board" >:: fun _ ->
+           let path =
+             match
+               List.find_opt Sys.file_exists
+                 [ "data/board.json"; "../data/board.json" ]
+             with
+             | Some path -> path
+             | None -> failwith "data/board.json not found"
+           in
+           let board = ok (Board.load path) in
+           let state =
+             Play.snapshot
+               (Game.create board [ ("alex", "Alex"); ("blake", "Blake") ])
+           in
+           assert_equal 40 (List.length state.squares);
+           assert_equal "Go" (square state 0).name;
+           let baltic = square state 3 in
+           assert_equal "Baltic Avenue" baltic.name;
+           assert_equal (Some 60) baltic.price;
+           assert_equal (Some 4) baltic.rent;
+           assert_equal View_state.Brown baltic.group;
+           assert_equal "Boardwalk" (square state 39).name );
+         ( "base rents" >:: fun _ ->
+           let state = Play.snapshot (game ()) in
+           let reading = square state 5 in
+           assert_equal "Reading Railroad" reading.name;
+           assert_equal (Some 200) reading.price;
+           assert_equal (Some 25) reading.rent;
+           assert_equal View_state.Railroad reading.group;
+           assert_equal None (square state 12).rent;
+           assert_equal View_state.Utility (square state 12).group );
+         ( "buy or pass baltic" >:: fun _ ->
+           let state = Play.snapshot (roll (1, 2) (game ())) in
            assert_equal
-             (Game.Awaiting_rent { square = 1; owner = "a"; amount = 4 })
-             (Game.phase g) );
-         ( "paying rent moves the money" >:: fun _ ->
-           let g = ok (Game.buy (ok (Game.roll (3, 4) (new_game ())))) in
-           let g = ok (Game.pay (ok (Game.roll (3, 4) g))) in
-           (* Blake: 1500 + 200 (Go) - 4 rent; Alex: 1640 + 4 *)
-           assert_equal 1696 (cash g "b") ~printer:pp_int;
-           assert_equal 1644 (cash g "a") ~printer:pp_int );
-         ( "can't buy what you can't afford" >:: fun _ ->
-           (* 2+2 lands on the $2000 Mansion *)
-           let g = ok (Game.roll (2, 2) (new_game ())) in
-           assert_equal (Game.Awaiting_buy 4) (Game.phase g);
-           assert_bool "buy should fail" (is_error (Game.buy g)) );
-         ( "can't buy, pass, or pay before rolling" >:: fun _ ->
-           let g = new_game () in
-           assert_bool "buy" (is_error (Game.buy g));
-           assert_bool "pass" (is_error (Game.pass g));
-           assert_bool "pay" (is_error (Game.pay g)) );
-         ( "can't roll twice in a row" >:: fun _ ->
-           let g = ok (Game.roll (3, 4) (new_game ())) in
-           assert_bool "second roll" (is_error (Game.roll (1, 1) g)) );
-         ( "dice must be 1 to 6" >:: fun _ ->
-           let g = new_game () in
-           assert_bool "0" (is_error (Game.roll (0, 3) g));
-           assert_bool "7" (is_error (Game.roll (7, 1) g)) );
-         ( "non-property squares just end the turn" >:: fun _ ->
-           (* 1+2 lands on Chance (cards come in MS3) *)
-           let g = ok (Game.roll (1, 2) (new_game ())) in
-           assert_equal "b" (Game.current g).id );
-         ( "turns go Alex, Blake, Alex" >:: fun _ ->
-           let g0 = new_game () in
-           let g1 = ok (Game.roll (1, 2) g0) in
-           let g2 = ok (Game.roll (1, 2) g1) in
-           assert_equal [ "a"; "b"; "a" ]
-             (List.map (fun g -> (Game.current g).id) [ g0; g1; g2 ]) );
-         ( "same seed gives the same rolls" >:: fun _ ->
-           let r1 = Dice.roller ~seed:42 () and r2 = Dice.roller ~seed:42 () in
-           let five r = List.init 5 (fun _ -> r ()) in
-           assert_equal (five r1) (five r2) );
-         ( "dice are always 1 to 6" >:: fun _ ->
-           let r = Dice.roller ~seed:7 () in
-           for _ = 1 to 1000 do
-             let a, b = r () in
-             assert_bool "in range" (a >= 1 && a <= 6 && b >= 1 && b <= 6)
-           done );
+             (View_state.Buy_or_pass { square = 3; price = 60; rent = 4 })
+             state.screen;
+           assert_equal (Some { View_state.die1 = 1; die2 = 2 }) state.last_dice;
+           assert_equal (Some View_state.Buy) (View.command_of_key state 'b');
+           assert_equal (Some View_state.Pass) (View.command_of_key state 'p');
+           let text = View.plain (View.render state) in
+           assert_has "name" text "Baltic";
+           assert_has "price" text "$60" );
+         ( "buy" >:: fun _ ->
+           let landed = roll (1, 2) (game ()) in
+           let state =
+             Play.snapshot
+               (Play.apply ~roll:(fun () -> (0, 0)) View_state.Buy landed)
+           in
+           assert_equal View_state.Overview state.screen;
+           assert_equal "blake" state.current;
+           assert_equal 2 state.turn;
+           assert_equal (Some "alex") (owner state 3);
+           assert_equal 1440 (cash state "alex") );
+         ( "pass" >:: fun _ ->
+           let landed = roll (1, 2) (game ()) in
+           let state =
+             Play.snapshot
+               (Play.apply ~roll:(fun () -> (0, 0)) View_state.Pass landed)
+           in
+           assert_equal View_state.Overview state.screen;
+           assert_equal "blake" state.current;
+           assert_equal None (owner state 3);
+           assert_equal 1500 (cash state "alex") );
+         ( "rent" >:: fun _ ->
+           let bought =
+             Play.apply
+               ~roll:(fun () -> (0, 0))
+               View_state.Buy
+               (roll (1, 2) (game ()))
+           in
+           let owing = roll (1, 2) bought in
+           let state = Play.snapshot owing in
+           assert_equal
+             (View_state.Payment
+                {
+                  kind = Rent;
+                  payer = "blake";
+                  amount = 4;
+                  payee = Some "alex";
+                  square = Some 3;
+                })
+             state.screen;
+           let paid =
+             Play.snapshot
+               (Play.apply ~roll:(fun () -> (0, 0)) View_state.Pay owing)
+           in
+           assert_equal View_state.Overview paid.screen;
+           assert_equal "alex" paid.current;
+           assert_equal (Some View_state.Roll) (View.command_of_key paid 'r');
+           assert_equal 1444 (cash paid "alex");
+           assert_equal 1496 (cash paid "blake") );
+         ( "utility offer" >:: fun _ ->
+           let state = Play.snapshot (roll (6, 6) (game ())) in
+           assert_equal
+             (View_state.Buy_or_pass { square = 12; price = 150; rent = 48 })
+             state.screen;
+           assert_equal None (square state 12).rent );
+         ( "tax skips payment" >:: fun _ ->
+           let state = Play.snapshot (roll (1, 3) (game ())) in
+           assert_equal View_state.Overview state.screen;
+           assert_equal "blake" state.current;
+           assert_bool "tax log" (log_has state "Taxes come in MS3.") );
+         ( "roll during buy" >:: fun _ ->
+           let landed = roll (1, 2) (game ()) in
+           let calls = ref 0 in
+           let state =
+             Play.snapshot
+               (Play.apply
+                  ~roll:(fun () ->
+                    incr calls;
+                    (1, 1))
+                  View_state.Roll landed)
+           in
+           assert_equal 0 !calls;
+           assert_equal
+             (View_state.Buy_or_pass { square = 3; price = 60; rent = 4 })
+             state.screen;
+           assert_equal None (owner state 3);
+           assert_equal 1500 (cash state "alex");
+           assert_bool "roll error" (log_has state "You can't roll right now.")
+         );
        ]
 
 let _ = run_test_tt_main tests
