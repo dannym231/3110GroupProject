@@ -11,8 +11,10 @@ let dump () =
     (View_dummy.ids ())
 
 let with_play run =
-  View.with_terminal run;
-  print_endline "Bye."
+  try
+    View.with_terminal run;
+    print_endline "Bye."
+  with Sys.Break -> exit 130
 
 let require_tty () =
   if View.isatty () then ()
@@ -86,73 +88,22 @@ let players_of = function
   | [] -> [ ("alex", "Alex"); ("blake", "Blake") ]
   | names -> List.map (fun name -> (name, name)) names
 
-let load_board () =
+let start ?seed names =
   match Board.load "data/board.json" with
   | Error msg -> die ("monopoly: " ^ msg)
   | Ok board when Board.size board <> 40 ->
       die "monopoly: the terminal board is 40 squares"
-  | Ok board -> board
-
-let start ?seed names =
-  let board = load_board () in
-  let game =
-    try Game.create board (players_of names)
-    with Invalid_argument msg -> die ("monopoly: " ^ msg)
-  in
-  play ?seed game
+  | Ok board -> (
+      match
+        try Ok (Game.create board (players_of names))
+        with Invalid_argument msg -> Error msg
+      with
+      | Error msg -> die ("monopoly: " ^ msg)
+      | Ok game -> play ?seed game)
 
 let usage () =
-  prerr_endline
-    "usage: monopoly [--dump | --tour | --seed N] [name ...]\n\
-    \       monopoly --host NAME [--port PORT] [--seed N]\n\
-    \       monopoly --join HOST NAME [--port PORT]";
+  prerr_endline "usage: monopoly [--dump | --tour | --seed N] [name ...]";
   exit 2
-
-let run_lan open_game =
-  require_tty ();
-  let previous_int =
-    Sys.signal Sys.sigint (Sys.Signal_handle (fun _ -> raise Sys.Break))
-  in
-  let previous_pipe = Sys.signal Sys.sigpipe Sys.Signal_ignore in
-  try
-    Fun.protect
-      ~finally:(fun () ->
-        Sys.set_signal Sys.sigint previous_int;
-        Sys.set_signal Sys.sigpipe previous_pipe)
-      (fun () ->
-        let game = open_game () in
-        Fun.protect
-          ~finally:(fun () -> Lan.close game)
-          (fun () -> with_play (fun () -> Lan_play.run game)))
-  with
-  | Failure msg -> die ("monopoly: " ^ msg)
-  | Unix.Unix_error (error, operation, _) ->
-      die
-        (Printf.sprintf "monopoly: %s: %s" operation (Unix.error_message error))
-
-let host ~port ?seed name =
-  let board = load_board () in
-  let roll = Dice.roller ?seed () in
-  run_lan (fun () ->
-      let listener = Net.listen ~addr:"0.0.0.0" port in
-      Fun.protect
-        ~finally:(fun () -> Unix.close listener)
-        (fun () ->
-          Printf.printf "Waiting on port %d for one player to join.\n%!" port;
-          Lan.accept listener ~board ~roll ~name))
-
-let rec lan_options ~allow_seed port seed = function
-  | [] -> (Option.value port ~default:Net.default_port, seed)
-  | "--port" :: value :: rest when Option.is_none port -> (
-      match int_of_string_opt value with
-      | Some p when p > 0 && p <= 65535 ->
-          lan_options ~allow_seed (Some p) seed rest
-      | _ -> usage ())
-  | "--seed" :: value :: rest when allow_seed && Option.is_none seed -> (
-      match int_of_string_opt value with
-      | Some n -> lan_options ~allow_seed port (Some n) rest
-      | None -> usage ())
-  | _ -> usage ()
 
 let rec split_seed seed names = function
   | [] -> Some (seed, List.rev names)
@@ -164,21 +115,19 @@ let rec split_seed seed names = function
   | arg :: _ when String.starts_with ~prefix:"--" arg -> None
   | name :: rest -> split_seed seed (name :: names) rest
 
-let run = function
+let () =
+  let args =
+    match Array.to_list Sys.argv with
+    | [] -> []
+    | _ :: rest -> rest
+  in
+  match args with
   | [ "--dump" ] -> dump ()
   | [ "--tour" ] -> tour ()
-  | "--host" :: name :: options ->
-      let port, seed = lan_options ~allow_seed:true None None options in
-      host ~port ?seed name
-  | "--join" :: address :: name :: options ->
-      let port, _ = lan_options ~allow_seed:false None None options in
-      run_lan (fun () -> Lan.join ~address ~port ~name)
-  | args -> (
+  | _ -> (
       match split_seed None [] args with
       | None -> usage ()
       | Some (_, [ _ ]) ->
           prerr_endline "monopoly: need at least two players";
           exit 2
       | Some (seed, names) -> start ?seed names)
-
-let () = try run (List.tl (Array.to_list Sys.argv)) with Sys.Break -> exit 130

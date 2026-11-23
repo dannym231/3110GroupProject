@@ -43,7 +43,3 @@ val isatty : unit -> bool
 val terminal_size : unit -> int * int
 val with_terminal : (unit -> 'a) -> 'a
 val read_event : size:int * int -> event
-
-val poll_event : size:int * int -> event option
-(** Wait briefly for a terminal event. [None] lets LAN play poll while input is
-    idle. *)
