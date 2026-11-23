@@ -17,5 +17,11 @@
  (modules test_game)
  (libraries ounit2 monopoly))
 
+(test
+ (name board_test)
+ (modules board_test)
+ (libraries ounit2 monopoly)
+ (deps (glob_files_rec ../data/*)))
+
 (cram
  (deps %{bin:monopoly}))
