@@ -1,5 +1,6 @@
 (test
  (name test_monopoly)
+ (modules test_monopoly)
  (libraries ounit2 monopoly)
  (deps ../data/board.json)
  (action
@@ -8,7 +9,13 @@
 
 (test
  (name test_view)
+ (modules test_view)
+ (libraries ounit2 monopoly))
+
+(test
+ (name test_game)
+ (modules test_game)
  (libraries ounit2 monopoly))
 
 (cram
- (deps ../bin/main.exe))
+ (deps %{bin:monopoly}))
