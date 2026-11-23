@@ -21,7 +21,8 @@
  (description "A longer description")
  (depends
   ocaml
-  ansi-terminal)
+  ansi-terminal
+  yojson)
  (tags
   ("add topics" "to describe" your project)))
 

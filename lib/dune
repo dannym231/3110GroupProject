@@ -2,4 +2,4 @@
 
 (library
  (name monopoly)
- (libraries unix ANSITerminal))
+ (libraries unix ANSITerminal yojson))
